@@ -80,8 +80,3 @@ Launch the dashboard:
   Excel headers)
 - Combine all cleaned tables into one unified, queryable dataset
 - Deploy the dashboard publicly (Streamlit Community Cloud)
-
-## Team
-
-Aryan Bhusal, Rita Neupane, Bishal Neupane, with guidance from counselor
-Mr. Abbal Dhakal (Trinity International College).
