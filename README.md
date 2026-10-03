@@ -23,15 +23,16 @@ applied to education data.
 ## Current Status
 
 This is an early proof of concept, not a finished dataset. Right now it
-successfully extracts and cleans **one table** (Table 3.1: Number of Schools by
-Province) from the Flash I Report PDF, including correctly handling a genuinely
+extracts and cleans **33 tables** from the Flash I Report PDF (listed in
+`TABLES` in `src/extractor.py`), including correctly handling a genuinely
 messy real-world problem: merged header cells whose actual values shift column
 position row to row. That specific fix is the hard part of this project, and
-it's proven working end to end: PDF to cleaned CSV to live dashboard.
+it's proven working end to end: PDF to cleaned CSVs to live dashboard.
 
-Not yet done: the other roughly 40 tables in the Flash I Report PDF, and the
-separate Annex spreadsheet files CEHRD also publishes (which have their own
-different formatting problems). See Roadmap below.
+Not yet done: the remaining tables in the Flash I Report PDF (listed as
+comments in `src/extractor.py`), and the separate Annex spreadsheet files CEHRD
+also publishes (which have their own different formatting problems). See
+Roadmap below.
 
 ## Tech Stack
 
@@ -42,19 +43,20 @@ different formatting problems). See Roadmap below.
 
 ## How It Works
 
-1. `src/extractor.py` opens the source PDF, locates a target table, and extracts
-   it as raw data
-2. Because of how the PDF's merged cells are structured, the raw values often
-   land in the wrong column position depending on the row. The script corrects
-   this by grouping columns and picking whichever cell in each group actually
-   contains a value
-3. The cleaned data is saved to `data/processed/output.csv`
-4. `src/app.py` loads that CSV into a Streamlit dashboard with province
-   filtering and a bar chart
+1. `src/extractor.py` opens the source PDF and extracts each table listed in
+   `TABLES` as raw data
+2. Because of how the PDF's merged cells are structured, in some tables the raw
+   values land in the wrong column position depending on the row. The script
+   corrects this by grouping columns and picking whichever cell in each group
+   actually contains a value. Tables whose cells are already in place only
+   have their headers flattened
+3. Each cleaned table is saved to `data/processed/table_<number>_<name>.csv`
+4. `src/app.py` loads those CSVs into a Streamlit dashboard where you pick a
+   table, filter by province (where the table has one), and chart a column
 
 ## Setup
 
-    git clone https://github.com/yourusername/nepal-education-data-engine.git
+    git clone https://github.com/Bishalneupa/nepal-education-data-engine.git
     cd nepal-education-data-engine
     python -m venv venv
     venv\Scripts\activate
