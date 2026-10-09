@@ -1,0 +1,51 @@
+name: Keep Streamlit App Alive
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+  workflow_dispatch:         # lets you run it manually from GitHub
+
+permissions:
+  contents: read
+
+jobs:
+  wake-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Visit the app
+        env:
+          APP_URL: "https://nepal-education-data-engine.streamlit.app/"
+        run: |
+          python - <<'EOF'
+          import os, time
+          from playwright.sync_api import sync_playwright
+
+          url = os.environ["APP_URL"]
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page()
+              page.goto(url, wait_until="domcontentloaded", timeout=60000)
+              time.sleep(10)
+
+              wake_button = page.get_by_role("button", name="Yes, get this app back up!")
+              if wake_button.count() > 0:
+                  wake_button.first.click()
+                  print("App was asleep - clicked the wake-up button")
+                  time.sleep(45)
+              else:
+                  print("App was already awake")
+                  time.sleep(15)
+
+              browser.close()
+          EOF
