@@ -38,6 +38,7 @@ TABLES = [
     {"page": 27, "idx": 0, "pattern": "shift_bug", "label": "2_6_eced_enabling_conditions"},
     {"page": 28, "idx": 0, "pattern": "direct_clean", "label": "2_7_caste_ethnic_eced"},
     {"page": 28, "idx": 1, "pattern": "direct_clean", "label": "2_8_ger_ner_eced"},
+    {"page": 30, "idx": 0, "pattern": "shift_bug", "label": "3_1_schools_by_province"},
     {"page": 31, "idx": 0, "pattern": "direct_clean", "label": "3_2_basic_level_schools"},
     {"page": 35, "idx": 0, "pattern": "shift_bug", "label": "3_8_clcs"},
     {"page": 38, "idx": 1, "pattern": "direct_clean", "label": "4_4_janajati_basic"},

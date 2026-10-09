@@ -20,9 +20,7 @@ def pretty_label(filename: str) -> str:
     return stem.replace("_", " ")
 
 
-# Find every CSV that's actually been extracted so far, regardless of
-# whether it came from the original single-table script or the new
-# multi-table one.
+# Find every CSV that's actually been extracted so far.
 csv_files = sorted(DATA_DIR.glob("*.csv"))
 
 if not csv_files:
@@ -35,9 +33,12 @@ selected_file = labels[selected_label]
 
 df = pd.read_csv(selected_file, dtype=str)
 
-# Every one of these tables is organized by Province, so this filter
-# works the same way regardless of which table is selected.
-if "Province" in df.columns:
+# Most tables are organized by Province; the rest (e.g. by Grade) use
+# their first column as the row label instead.
+has_province = "Province" in df.columns
+label_col = "Province" if has_province else df.columns[0]
+
+if has_province:
     provinces = df["Province"].tolist()
     selected = st.multiselect("Filter by Province", provinces, default=provinces)
     filtered = df[df["Province"].isin(selected)]
@@ -50,17 +51,29 @@ st.dataframe(filtered, use_container_width=True)
 # Let the viewer pick which column to chart. Values are stored as text
 # (e.g. "8,265") because different tables have different formats, so we
 # strip commas and convert to numbers here, just for charting.
-numeric_candidates = [c for c in filtered.columns if c != "Province"]
+numeric_candidates = [c for c in filtered.columns if c != label_col]
 
 if numeric_candidates:
     chart_column = st.selectbox("Chart which column?", numeric_candidates)
-    show_total = st.checkbox("Include national total (Nepal) in chart", value=False)
 
-    chart_df = filtered if show_total else filtered[filtered.get("Province") != "Nepal"]
+    chart_df = filtered
+    if has_province:
+        show_total = st.checkbox("Include national total (Nepal) in chart", value=False)
+        if not show_total:
+            chart_df = filtered[filtered["Province"] != "Nepal"]
+
     chart_values = pd.to_numeric(
         chart_df[chart_column].str.replace(",", "", regex=False),
         errors="coerce"
     )
 
-    st.subheader(f"{chart_column} by Province")
-    st.bar_chart(chart_values.set_axis(chart_df["Province"]))
+    # The chart library reads "name:type" in field names, so a ":" (as in
+    # pandas' "Unnamed: 0" for a blank header) has to be dropped
+    chart_values = (
+        chart_values.set_axis(chart_df[label_col])
+        .rename(chart_column.replace(":", ""))
+        .rename_axis(label_col.replace(":", ""))
+    )
+
+    st.subheader(f"{chart_column} by {label_col}")
+    st.bar_chart(chart_values)
