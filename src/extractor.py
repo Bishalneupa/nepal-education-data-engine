@@ -1,7 +1,7 @@
 """
 extractor.py — Multi-table version
 
-Covers 41 tables from the Flash I Report that fit one of eight verified
+Covers 67 tables from the Flash I Report that fit one of ten verified
 patterns. Each becomes its own CSV in data/processed/.
 
 PATTERN "shift_bug": same issue as our original Table 3.1 — a header
@@ -37,6 +37,23 @@ sub header, and where the data starts. An optional "tail_from" merges
 all columns from that position on into ONE column (Tables 4.8 and 5.4:
 the "Gender Parity" header is spread over 3 raw columns but holds a
 single value).
+
+PATTERN "single_header": a clean one-row header, nothing to fix except
+total-row labels. Tables 3.5, 3.6, 4.16, 4.17, 4.20 (by province).
+
+PATTERN "named_columns": the PDF's header is a tangle of merged and
+shifted cells, so the column names are written out by hand (checked
+against the printed page) and the VALUES are collected row by row:
+  - default: the columns are "locked" to the positions of the fullest
+    row, and every other row may only have values at those positions
+    (this lets a row like "Nepal (%)" legitimately leave cells blank);
+  - "compact": values drift between raw columns from row to row, so take
+    each row's values in order (every row must have exactly the expected
+    number);
+  - "compact" + "optional": same, but a short row may skip the listed
+    columns (e.g. a "Nepal (%)" row with no school count).
+Any row that does not fit stops the run with an error instead of
+silently putting a number in the wrong column.
 """
 
 import pdfplumber
@@ -47,6 +64,40 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 PDF_PATH = SCRIPT_DIR.parent / "data" / "raw" / "sample.pdf"
 OUTPUT_DIR = SCRIPT_DIR.parent / "data" / "processed"
+
+# Total rows are labelled "TOTAL" or "%" in a few tables; make them match
+# the "Nepal" / "Nepal (%)" labels used elsewhere so the dashboard can
+# recognise them as national figures.
+ROW_LABEL_FIXES = {"TOTAL": "Nepal", "%": "Nepal (%)"}
+
+
+def gbt(*groups, labels=("Girls", "Boys", "Total")):
+    """Column names for repeated Girls/Boys/Total blocks."""
+    return [f"{g}_{lab}" for g in groups for lab in labels]
+
+
+def infra_cols(grades):
+    return ["Province", f"Schools ({grades})", "Average Buildings", "Electricity",
+            "Computers", "Average Computers", "Drinking Water", "Library",
+            "Child Club", "Toilet", "Internet"]
+
+
+def material_cols(grades, pct=False):
+    suffix = " (%)" if pct else ""
+    return ["Province", f"Schools ({grades})"] + [
+        f"{m}{suffix}" for m in ("Teachers' Guide", "Child Material", "Book Corner",
+                                  "Curriculum", "Local Curriculum", "Reference Material")]
+
+
+def sip_cols(pct=False):
+    suffix = " (%)" if pct else ""
+    return ["Province", "Schools (1-10)", "Schools (1-12)"] + [
+        f"Secondary ({g})_{x}{suffix}" for g in ("1-10", "1-12")
+        for x in ("SIP", "Social Audit", "Financial Audit")]
+
+
+SHARE_COLS = ["Community_Share of students", "Institutional_Share of students"]
+
 
 # Each entry: page number (1-indexed), which table on that page (0-indexed,
 # for pages with more than one table), which pattern it follows, and a
@@ -69,7 +120,24 @@ TABLES = [
     {"page": 31, "idx": 0, "pattern": "direct_clean", "label": "3_2_basic_level_schools"},
     {"page": 31, "idx": 1, "pattern": "stacked_header", "label": "3_3_secondary_level_schools",
      "top_rows": [0], "sub_rows": [1, 2], "data_start": 3},
+    {"page": 32, "idx": 0, "pattern": "named_columns", "label": "3_4_technical_stream_schools",
+     "data_start": 3,
+     "columns": ["Province", "Schools_CEHRD", "Schools_Province", "Schools_Local", "Schools_Total",
+                 "Students", "Average students per school", "Average students per class"]},
+    {"page": 33, "idx": 0, "pattern": "single_header", "label": "3_5_model_schools"},
+    {"page": 34, "idx": 0, "pattern": "single_header", "label": "3_6_special_school_resource_class"},
+    {"page": 34, "idx": 1, "pattern": "named_columns", "label": "3_7_disability_screening",
+     "data_start": 2,
+     "columns": ["Province", "Students in IEMIS (All)", "ECED-G3", "Screened Students",
+                 "Screened %", "Suspected", "Referred", "Confirmed"]},
     {"page": 35, "idx": 0, "pattern": "shift_bug", "label": "3_8_clcs"},
+    {"page": 36, "idx": 0, "pattern": "named_columns", "label": "4_1_students_basic",
+     "data_start": 2,
+     "columns": ["Province"] + gbt("Total", "Community", "Institutional")
+                + ["Community_% Girls", "Institutional_% Girls"]},
+    {"page": 37, "idx": 0, "pattern": "named_columns", "label": "4_2_students_by_grade_basic",
+     "data_start": 2,
+     "columns": ["Grade"] + gbt("Total", "Community", "Institutional") + SHARE_COLS},
     {"page": 38, "idx": 0, "pattern": "stacked_header", "label": "4_3_dalit_janajati_basic",
      "top_rows": [0, 1], "sub_rows": [2, 3], "data_start": 4},
     {"page": 38, "idx": 1, "pattern": "direct_clean", "label": "4_4_janajati_basic"},
@@ -82,7 +150,36 @@ TABLES = [
     {"page": 42, "idx": 0, "pattern": "direct_clean", "label": "4_10_survival_rates_basic"},
     {"page": 42, "idx": 1, "pattern": "shift_bug", "label": "4_11_student_school_ratio_basic"},
     {"page": 46, "idx": 1, "pattern": "shift_bug", "label": "4_19_governance_basic"},
+    {"page": 43, "idx": 0, "pattern": "named_columns", "label": "4_12_infrastructure_basic_1_5_community",
+     "data_start": 4, "columns": infra_cols("1-5")},
+    {"page": 43, "idx": 1, "pattern": "named_columns", "label": "4_13_infrastructure_basic_1_8_community",
+     "data_start": 4, "columns": infra_cols("1-8")},
+    {"page": 44, "idx": 0, "pattern": "named_columns", "label": "4_14_materials_basic_1_5_community",
+     "data_start": 2, "columns": material_cols("1-5")},
+    {"page": 44, "idx": 1, "pattern": "named_columns", "label": "4_15_materials_basic_1_8_community",
+     "data_start": 2, "mode": "compact", "optional": [1], "columns": material_cols("1-8")},
+    {"page": 45, "idx": 0, "pattern": "single_header", "label": "4_16_midday_meal_menu"},
+    {"page": 45, "idx": 1, "pattern": "single_header", "label": "4_17_midday_meal_source"},
+    {"page": 46, "idx": 0, "pattern": "named_columns", "label": "4_18_midday_meal_management",
+     "data_start": 4,
+     "columns": ["Province", "Schools", "Catering", "Mother's Group", "Parents", "School canteen",
+                 "School's Human resource", "Others agencies", "Not stated"]},
     {"page": 47, "idx": 0, "pattern": "title_then_header", "label": "4_20_scholarship"},
+    {"page": 47, "idx": 1, "pattern": "single_header", "label": "4_20_scholarship_by_province"},
+    {"page": 48, "idx": 0, "pattern": "named_columns", "label": "4_21_oosc_basic",
+     "data_start": 2, "mode": "compact",
+     "columns": ["Province", "Number_Girls", "Number_Boys", "Number_Total",
+                 "Percent_Girls", "Percent_Boys", "Percent_Total"]},
+    {"page": 49, "idx": 0, "pattern": "named_columns", "label": "5_1_students_secondary",
+     "data_start": 2,
+     "columns": ["Province"] + gbt("Total", "Community", "Institutional")
+                + ["Community_% Girls", "Institutional_% Girls"]},
+    {"page": 50, "idx": 0, "pattern": "named_columns", "label": "5_2_religious_schools_students",
+     "data_start": 2, "mode": "compact",
+     "columns": ["Province"] + gbt("G 9-10", "G 11-12", "Total")},
+    {"page": 50, "idx": 1, "pattern": "named_columns", "label": "5_3_students_by_grade_secondary",
+     "data_start": 4,
+     "columns": ["Grade"] + gbt("Total", "Community", "Institutional") + SHARE_COLS},
     {"page": 51, "idx": 0, "pattern": "direct_clean", "label": "5_2_caste_secondary"},
     {"page": 51, "idx": 2, "pattern": "direct_clean", "label": "5_3_disadvantaged_caste_secondary"},
     {"page": 52, "idx": 0, "pattern": "direct_clean", "label": "5_4_disability_secondary"},
@@ -91,6 +188,22 @@ TABLES = [
     {"page": 53, "idx": 2, "pattern": "stacked_header", "label": "5_4_ger_ner_secondary_additional",
      "top_rows": [0], "sub_rows": [1], "data_start": 2, "tail_from": 7},
     {"page": 54, "idx": 0, "pattern": "direct_clean", "label": "5_5_student_school_ratio_secondary"},
+    {"page": 54, "idx": 1, "pattern": "named_columns", "label": "5_6_infrastructure_secondary_1_10_community",
+     "data_start": 4, "columns": infra_cols("1-10")},
+    {"page": 55, "idx": 0, "pattern": "named_columns", "label": "5_9_infrastructure_secondary_1_12_community",
+     "data_start": 4, "columns": infra_cols("1-12")},
+    {"page": 55, "idx": 1, "pattern": "named_columns", "label": "5_10_materials_secondary_1_10_community",
+     "data_start": 2, "mode": "compact", "optional": [1], "columns": material_cols("1-10")},
+    {"page": 56, "idx": 0, "pattern": "named_columns", "label": "5_11_materials_secondary_1_10_percent",
+     "data_start": 2, "mode": "compact", "columns": material_cols("1-10", pct=True)},
+    {"page": 56, "idx": 1, "pattern": "named_columns", "label": "5_12_materials_secondary_1_12_community",
+     "data_start": 2, "mode": "compact", "optional": [1], "columns": material_cols("1-12")},
+    {"page": 57, "idx": 0, "pattern": "named_columns", "label": "5_7_materials_secondary_1_12_percent",
+     "data_start": 2, "mode": "compact", "columns": material_cols("1-12", pct=True)},
+    {"page": 57, "idx": 1, "pattern": "named_columns", "label": "5_8_sip_audit_secondary",
+     "data_start": 6, "mode": "compact", "columns": sip_cols()},
+    {"page": 58, "idx": 0, "pattern": "named_columns", "label": "5_9_sip_audit_secondary_percent",
+     "data_start": 6, "mode": "compact", "columns": sip_cols(pct=True)},
     {"page": 60, "idx": 0, "pattern": "direct_clean", "label": "6_1_teachers_by_gender_basic"},
     {"page": 60, "idx": 1, "pattern": "direct_clean", "label": "6_2_teachers_local_province_basic"},
     {"page": 60, "idx": 2, "pattern": "stacked_header", "label": "6_3_teachers_private_volunteer_community",
@@ -105,12 +218,6 @@ TABLES = [
     {"page": 63, "idx": 1, "pattern": "direct_clean", "label": "6_10_str_secondary"},
 ]
 
-# Confirmed present but NOT yet handled — different column structure,
-# needs individual inspection before adding (same as Table 3.1 did):
-# page 32 idx0, page 33 idx0, page 34 idx0/1, page 36 idx0, page 37 idx0,
-# page 43 idx0/1, page 44 idx0/1, page 45 idx0/1, page 46 idx0, page 47 idx1,
-# page 48 idx0, page 49 idx0, page 50 idx0/1, page 54 idx1, page 55 idx0/1,
-# page 56 idx0/1, page 57 idx0/1, page 58 idx0
 # (The tables that used to be listed here as "ambiguous" are now handled:
 # pages 29, 31, 38, 41, 53, 60 and 63.)
 
@@ -270,6 +377,43 @@ def extract_stacked(raw, top_rows, sub_rows, data_start, tail_from=None):
     return pd.DataFrame(rows, columns=cols)
 
 
+def fix_label(row):
+    row[0] = ROW_LABEL_FIXES.get(row[0], row[0])
+    return row
+
+
+def extract_named(raw, columns, data_start, mode="locked", optional=()):
+    """Hand-named columns; see PATTERN "named_columns" in the docstring."""
+    k = len(columns)
+    rows = [[clean_cell(c) for c in r] for r in raw[data_start:]]
+    rows = [r for r in rows if any(r)]
+    out = []
+
+    if mode == "locked":
+        ref = max(rows, key=lambda r: sum(1 for v in r if v))
+        keep = [j for j, v in enumerate(ref) if v]
+        if len(keep) != k:
+            raise ValueError(f"expected {k} columns but the fullest row has {len(keep)} values")
+        for r in rows:
+            stray = [j for j, v in enumerate(r) if v and j not in keep]
+            if stray:
+                raise ValueError(f"row {r[0]!r} has values outside the expected positions {stray}")
+            out.append(fix_label([r[j] for j in keep]))
+    elif mode == "compact":
+        for r in rows:
+            vals = [v for v in r if v]
+            if len(vals) == k:
+                out.append(fix_label(vals))
+            elif optional and len(vals) == k - len(optional):
+                it = iter(vals)
+                out.append(fix_label(["" if j in optional else next(it) for j in range(k)]))
+            else:
+                raise ValueError(f"row {r[0]!r} has {len(vals)} values, expected {k}")
+    else:
+        raise ValueError(f"unknown mode {mode!r}")
+    return pd.DataFrame(out, columns=columns)
+
+
 def extract_table(pdf, page_number, table_idx, pattern, opts=None):
     page = pdf.pages[page_number - 1]
     tables = page.extract_tables()
@@ -299,6 +443,12 @@ def extract_table(pdf, page_number, table_idx, pattern, opts=None):
     elif pattern == "shift_two_label":
         cols = coalesce_row_strict(raw[0], n_label_cols=2)
         rows = [coalesce_row_strict(r, n_label_cols=2) for r in raw[1:]]
+    elif pattern == "single_header":
+        cols = build_single_header(raw[0])
+        rows = [fix_label(clean_direct_row(r)) for r in raw[1:]]
+    elif pattern == "named_columns":
+        return extract_named(raw, opts["columns"], opts["data_start"],
+                             opts.get("mode", "locked"), opts.get("optional", ()))
     elif pattern == "stacked_header":
         return extract_stacked(raw, opts["top_rows"], opts["sub_rows"],
                                opts["data_start"], opts.get("tail_from"))
