@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this data or code, please cite it as below, and cite the original CEHRD report."
+title: "Nepal Open Education Data Engine"
+type: software
+authors:
+  - family-names: Neupane
+    given-names: Bishal
+repository-code: "https://github.com/Bishalneupa/nepal-education-data-engine"
+url: "https://nepal-education-data-engine.streamlit.app/"
+license: MIT
+date-released: 2026-11-04
+abstract: "Turns the tables in CEHRD Nepal's Flash I Report 2082 (2025/26) from a PDF into clean CSV files, checks every extracted number against the source, and serves them in an open dashboard."
+keywords:
+  - Nepal
+  - education
+  - open data
+  - CEHRD
+  - PDF table extraction

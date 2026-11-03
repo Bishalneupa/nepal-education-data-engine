@@ -106,13 +106,15 @@ The KPI CSV carries a `qa_flag` column that marks each of these rows.
 ```
 .devcontainer/            Dev container config
 .github/workflows/        keep-alive.yml, see below
+.streamlit/config.toml    Dashboard colours and theme
 data/processed/           The CSVs: table_*.csv, plus sesp_kpi_indicators.csv
 src/extractor.py          PDF to CSV
 src/app.py                Streamlit dashboard
+CITATION.cff              How to cite this repository
 requirements.txt
 ```
 
-**The dashboard** lists every CSV in `data/processed`, filters by province, and charts any column. National rows (`Nepal`, `Nepal (No.)`, `Nepal (%)`) stay out of the chart unless you ask for them. Tables that aren't organised by province, such as the ones by grade or the KPI table, show the data without a chart.
+**The dashboard** groups every CSV in `data/processed` by chapter of the report and gives each table three views: a chart of any column, the full data with search and a CSV download, and the PDF page it came from. National rows (`Nepal`, `Nepal (No.)`, `Nepal (%)`) stay out of the charts unless you ask for them. The KPI table has its own view, showing base year, target and achievement side by side for each indicator. A separate tab lists the places where the original report disagrees with itself, and tables affected by one carry a warning. Every table has its own link: add `?table=table_4_12_infrastructure_basic_1_5_community` to the dashboard address to open it directly.
 
 **The keep-alive workflow.** Streamlit Community Cloud puts free apps to sleep after a stretch of inactivity. A GitHub Actions job visits the app every six hours in a headless browser and presses the wake-up button if it finds one, so the link in this README works when you click it.
 
