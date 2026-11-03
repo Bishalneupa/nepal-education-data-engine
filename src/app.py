@@ -67,7 +67,10 @@ elif numeric_candidates:
     if has_province:
         show_total = st.checkbox("Include national total (Nepal) in chart", value=False)
         if not show_total:
-            chart_df = filtered[filtered["Province"] != "Nepal"]
+            # Hide every national row ("Nepal", "Nepal (No.)", "Nepal (%)"),
+            # not just the one called exactly "Nepal".
+            is_national = filtered["Province"].fillna("").str.startswith("Nepal")
+            chart_df = filtered[~is_national]
 
     chart_values = pd.to_numeric(
         chart_df[chart_column].str.replace(",", "", regex=False),

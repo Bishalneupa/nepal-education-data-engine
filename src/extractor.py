@@ -1,7 +1,7 @@
 """
 extractor.py — Multi-table version
 
-Covers 67 tables from the Flash I Report that fit one of ten verified
+Covers 71 tables from the Flash I Report that fit one of eleven verified
 patterns. Each becomes its own CSV in data/processed/.
 
 PATTERN "shift_bug": same issue as our original Table 3.1 — a header
@@ -54,6 +54,10 @@ against the printed page) and the VALUES are collected row by row:
     columns (e.g. a "Nepal (%)" row with no school count).
 Any row that does not fit stops the run with an error instead of
 silently putting a number in the wrong column.
+
+PATTERN "split_rows": one logical row is spread over several raw rows
+(a label that wraps onto two lines, values split between two rows).
+Key finding 3 (teachers).
 """
 
 import pdfplumber
@@ -106,6 +110,20 @@ SHARE_COLS = ["Community_Share of students", "Institutional_Share of students"]
 # hand-verified — the DATA is verified correct either way; only the label
 # might need a manual rename later.
 TABLES = [
+    {"page": 12, "idx": 0, "pattern": "named_columns", "label": "kf1_number_of_schools",
+     "data_start": 2,
+     "columns": ["School Types", "Total", "Community", "Institutional", "Religious"]},
+    {"page": 12, "idx": 1, "pattern": "named_columns", "label": "kf2_number_of_students",
+     "data_start": 4,
+     "columns": ["Level"] + gbt("Total", "Community", "Institutional", "Religious",
+                                labels=("Total", "Girls"))},
+    {"page": 13, "idx": 0, "pattern": "split_rows", "label": "kf3_number_of_teachers",
+     "columns": ["Teacher Types", "Basic (1-5)", "Basic (6-8)", "Basic (1-8)",
+                 "Sec (9-10)", "Sec (11-12)", "Sec (9-12)"]},
+    {"page": 13, "idx": 1, "pattern": "named_columns", "label": "kf4_student_teacher_ratio",
+     "data_start": 2,
+     "columns": ["Level"] + gbt("Total", "Community", "Institutional",
+                                labels=("Students", "Teacher", "STR"))},
     {"page": 24, "idx": 0, "pattern": "shift_bug", "label": "2_1_eced_centers"},
     {"page": 25, "idx": 0, "pattern": "direct_clean", "label": "2_2_children_in_eced"},
     {"page": 26, "idx": 0, "pattern": "single_header_grouped", "label": "2_3_disability_community_eced"},
@@ -414,6 +432,29 @@ def extract_named(raw, columns, data_start, mode="locked", optional=()):
     return pd.DataFrame(out, columns=columns)
 
 
+def extract_split_rows(raw, columns, data_start=1):
+    """A record = a row that has both a label and values; values on the
+    following label-less rows belong to it, and label-only rows are the
+    next line of its (wrapped) label."""
+    k = len(columns) - 1
+    records = []
+    for r in raw[data_start:]:
+        cells = [clean_cell(c) for c in r]
+        label, vals = cells[0], [v for v in cells[1:] if v]
+        if label and vals:
+            records.append({"label": [label], "vals": list(vals)})
+        elif vals:
+            records[-1]["vals"].extend(vals)
+        elif label:
+            records[-1]["label"].append(label)
+    rows = []
+    for rec in records:
+        if len(rec["vals"]) != k:
+            raise ValueError(f"{' '.join(rec['label'])!r} has {len(rec['vals'])} values, expected {k}")
+        rows.append([" ".join(rec["label"])] + rec["vals"])
+    return pd.DataFrame(rows, columns=columns)
+
+
 def extract_table(pdf, page_number, table_idx, pattern, opts=None):
     page = pdf.pages[page_number - 1]
     tables = page.extract_tables()
@@ -446,6 +487,8 @@ def extract_table(pdf, page_number, table_idx, pattern, opts=None):
     elif pattern == "single_header":
         cols = build_single_header(raw[0])
         rows = [fix_label(clean_direct_row(r)) for r in raw[1:]]
+    elif pattern == "split_rows":
+        return extract_split_rows(raw, opts["columns"])
     elif pattern == "named_columns":
         return extract_named(raw, opts["columns"], opts["data_start"],
                              opts.get("mode", "locked"), opts.get("optional", ()))
