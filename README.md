@@ -73,6 +73,29 @@ Launch the dashboard:
 
     streamlit run src/app.py
 
+## KPI Indicators Table
+
+The report opens with a results-framework table ("KPI and PRF of School
+Education Sector Plan", PDF pages 14-21). It has no "Table X.Y" caption, so
+`extractor.py` does not read it. `src/extract_kpis.py` extracts it to
+`data/processed/sesp_kpi_indicators.csv`: 185 rows covering 94 indicator
+numbers, with the 2021/22 base year, the 2025/26 target and the 2025/26
+achievement where the report gives them. It reads the same
+`data/raw/sample.pdf` as `extractor.py`:
+
+    python src/extract_kpis.py
+
+Rows where the PDF is internally inconsistent (for example a total that lies
+outside its girls and boys values, or an indicator number printed twice) carry
+a `qa_flag` that says why; the values themselves are never changed. The script
+stops with an error instead of guessing when the layout is not what it expects
+(it checks for 95 indicator blocks and 185 rows). Read the CSV with
+`keep_default_na=False`: the report prints "NA" as a note, and pandas would
+otherwise treat it as a missing value.
+
+In the dashboard it appears as "sesp kpi indicators" and is shown as a table
+without a chart, because it is not organised by Province.
+
 ## Roadmap
 
 - Extend `extractor.py` to handle the remaining tables in the Flash I Report
