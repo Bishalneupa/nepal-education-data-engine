@@ -37,7 +37,7 @@ DATA_DIR = SCRIPT_DIR.parent / "data" / "processed"
 
 STYLE = f"""
 <style>
-.block-container {{ padding-top: 1.6rem; max-width: 1250px; }}
+.block-container {{ padding-top: 4.2rem; max-width: 1250px; }}
 footer {{ visibility: hidden; }}
 .hero {{ background: linear-gradient(135deg, {NAVY} 0%, #1D3F6E 62%, {CRIMSON} 150%);
          color: #fff; padding: 26px 30px; border-radius: 14px; margin-bottom: 20px; }}
@@ -45,7 +45,7 @@ footer {{ visibility: hidden; }}
 .hero-sub {{ margin: 8px 0 0 0; opacity: .88; font-size: 1.0rem; }}
 .stat-row {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }}
 .stat {{ background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.20);
-         border-radius: 10px; padding: 9px 16px; min-width: 128px; }}
+         border-radius: 10px; padding: 9px 14px; min-width: 104px; }}
 .stat b {{ display: block; font-size: 1.35rem; }}
 .stat span {{ font-size: .72rem; opacity: .85; text-transform: uppercase; letter-spacing: .06em; }}
 .bars {{ margin: 6px 0 14px 0; }}
