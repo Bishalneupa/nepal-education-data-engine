@@ -33,7 +33,9 @@ labels = {pretty_label(f.name): f for f in csv_files}
 selected_label = st.selectbox("Choose a table", sorted(labels.keys()))
 selected_file = labels[selected_label]
 
-df = pd.read_csv(selected_file, dtype=str)
+# Only an empty cell counts as missing. The text "NA" printed in the report
+# (see the KPI table) must stay "NA" instead of silently becoming a blank.
+df = pd.read_csv(selected_file, dtype=str, keep_default_na=False, na_values=[""])
 
 # Every one of these tables is organized by Province, so this filter
 # works the same way regardless of which table is selected.
@@ -52,7 +54,12 @@ st.dataframe(filtered, use_container_width=True)
 # strip commas and convert to numbers here, just for charting.
 numeric_candidates = [c for c in filtered.columns if c != "Province"]
 
-if numeric_candidates:
+# The chart below is a by-Province bar chart. Tables that are indexed by
+# something else (a Grade, or the KPI table) have no Province column, so they
+# skip the chart instead of crashing.
+if "Province" not in filtered.columns:
+    st.caption("No chart for this table: it is not organised by Province.")
+elif numeric_candidates:
     chart_column = st.selectbox("Chart which column?", numeric_candidates)
     show_total = st.checkbox("Include national total (Nepal) in chart", value=False)
 
