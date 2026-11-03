@@ -1,7 +1,7 @@
 """
 extractor.py — Multi-table version
 
-Covers 71 tables from the Flash I Report that fit one of eleven verified
+Covers 71 tables from the Flash I Report that fit one of ten verified
 patterns. Each becomes its own CSV in data/processed/.
 
 PATTERN "shift_bug": same issue as our original Table 3.1 — a header
