@@ -1,6 +1,6 @@
 # Nepal Open Education Data Engine
 
-Nepal's national school census, taken out of a PDF and put back into a shape you can actually use.
+Nepal's national school census, taken out of a PDF and put back into a shape you can actually use efficiently.
 
 **Live dashboard:** https://nepal-education-data-engine.streamlit.app/
 
