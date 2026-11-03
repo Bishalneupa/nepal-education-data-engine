@@ -1,7 +1,7 @@
 """
 extractor.py — Multi-table version
 
-Covers 33 tables from the Flash I Report that fit one of two verified
+Covers 33 tables from the Flash I Report that fit one of five verified
 patterns. Each becomes its own CSV in data/processed/.
 
 PATTERN "shift_bug": same issue as our original Table 3.1 — a header
@@ -13,6 +13,18 @@ PATTERN "direct_clean": the merged header still needs flattening, but
 the data cells are already correctly filled — no shifting. Coalescing
 these would silently destroy real data (confirmed by testing: it would
 have dropped 2 of 3 true values from Table 6.1 without erroring).
+
+PATTERN "single_header_grouped": the table has ONE header row (not two),
+and the Province name is a merged cell spanning a Girls/Boys/Total group
+of rows. The name lands on a different row of each group (first row for
+Koshi, middle row for Madhesh, ...), so we fill it into every row of its
+group. Tables 2.3 and 2.4.
+
+PATTERN "three_header": three stacked header rows, data starts on row 4.
+Table 2.7.
+
+PATTERN "title_then_header": a title row sits above the single header
+row. Table 4.20.
 """
 
 import pdfplumber
@@ -33,12 +45,11 @@ OUTPUT_DIR = SCRIPT_DIR.parent / "data" / "processed"
 TABLES = [
     {"page": 24, "idx": 0, "pattern": "shift_bug", "label": "2_1_eced_centers"},
     {"page": 25, "idx": 0, "pattern": "direct_clean", "label": "2_2_children_in_eced"},
-    {"page": 26, "idx": 0, "pattern": "direct_clean", "label": "2_3_disability_community_eced"},
-    {"page": 26, "idx": 1, "pattern": "direct_clean", "label": "2_4_disability_institutional_eced"},
+    {"page": 26, "idx": 0, "pattern": "single_header_grouped", "label": "2_3_disability_community_eced"},
+    {"page": 26, "idx": 1, "pattern": "single_header_grouped", "label": "2_4_disability_institutional_eced"},
     {"page": 27, "idx": 0, "pattern": "shift_bug", "label": "2_6_eced_enabling_conditions"},
-    {"page": 28, "idx": 0, "pattern": "direct_clean", "label": "2_7_caste_ethnic_eced"},
+    {"page": 28, "idx": 0, "pattern": "three_header", "label": "2_7_caste_ethnic_eced"},
     {"page": 28, "idx": 1, "pattern": "direct_clean", "label": "2_8_ger_ner_eced"},
-    {"page": 30, "idx": 0, "pattern": "shift_bug", "label": "3_1_schools_by_province"},
     {"page": 31, "idx": 0, "pattern": "direct_clean", "label": "3_2_basic_level_schools"},
     {"page": 35, "idx": 0, "pattern": "shift_bug", "label": "3_8_clcs"},
     {"page": 38, "idx": 1, "pattern": "direct_clean", "label": "4_4_janajati_basic"},
@@ -49,7 +60,7 @@ TABLES = [
     {"page": 42, "idx": 0, "pattern": "direct_clean", "label": "4_10_survival_rates_basic"},
     {"page": 42, "idx": 1, "pattern": "shift_bug", "label": "4_11_student_school_ratio_basic"},
     {"page": 46, "idx": 1, "pattern": "shift_bug", "label": "4_19_governance_basic"},
-    {"page": 47, "idx": 0, "pattern": "direct_clean", "label": "4_20_scholarship"},
+    {"page": 47, "idx": 0, "pattern": "title_then_header", "label": "4_20_scholarship"},
     {"page": 51, "idx": 0, "pattern": "direct_clean", "label": "5_2_caste_secondary"},
     {"page": 51, "idx": 2, "pattern": "direct_clean", "label": "5_3_disadvantaged_caste_secondary"},
     {"page": 52, "idx": 0, "pattern": "direct_clean", "label": "5_4_disability_secondary"},
@@ -134,6 +145,48 @@ def clean_direct_row(row):
     return [clean_cell(c) for c in row]
 
 
+def build_single_header(raw_header):
+    """One header row: just clean it, no merging or joining needed."""
+    return [clean_cell(c) for c in raw_header]
+
+
+def fill_province_groups(rows, label_col=0, key_col=1, end_value="Total"):
+    """For tables where a merged Province cell spans a group of rows
+    (Girls / Boys / Total). The province name can sit on ANY row of its
+    group, so: collect rows until the row whose key column says "Total",
+    then give every row in that group the one non-empty label found."""
+    out = []
+    group = []
+
+    def flush():
+        label = next((r[label_col] for r in group if r[label_col]), "")
+        for r in group:
+            r[label_col] = label
+            out.append(r)
+
+    for row in rows:
+        group.append(row)
+        if row[key_col] == end_value:
+            flush()
+            group = []
+    if group:  # a trailing group with no Total row; don't lose it
+        flush()
+    return out
+
+
+def build_column_names_three_header(r0, r1, r2):
+    """Three stacked header rows. The top two are merged cells, so carry
+    their labels forward across the columns they span; the bottom row is
+    already one label per column."""
+    l0 = forward_fill_row(r0)
+    l1 = forward_fill_row(r1)
+    l2 = [clean_cell(c) for c in r2]
+    names = []
+    for a, b, c in zip(l0, l1, l2):
+        names.append("_".join(p for p in (a, b, c) if p))
+    return names
+
+
 def extract_table(pdf, page_number, table_idx, pattern):
     page = pdf.pages[page_number - 1]
     tables = page.extract_tables()
@@ -150,6 +203,15 @@ def extract_table(pdf, page_number, table_idx, pattern):
         top = forward_fill_row(raw[0])
         sub = [clean_cell(c) for c in raw[1]]
         cols = build_column_names_direct(top, sub)
+        rows = [clean_direct_row(r) for r in raw[2:]]
+    elif pattern == "single_header_grouped":
+        cols = build_single_header(raw[0])
+        rows = fill_province_groups([clean_direct_row(r) for r in raw[1:]])
+    elif pattern == "three_header":
+        cols = build_column_names_three_header(raw[0], raw[1], raw[2])
+        rows = [clean_direct_row(r) for r in raw[3:]]
+    elif pattern == "title_then_header":
+        cols = build_single_header(raw[1])
         rows = [clean_direct_row(r) for r in raw[2:]]
     else:
         raise ValueError(f"Unknown pattern: {pattern}")
