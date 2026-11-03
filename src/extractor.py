@@ -1,7 +1,7 @@
 """
 extractor.py — Multi-table version
 
-Covers 33 tables from the Flash I Report that fit one of five verified
+Covers 41 tables from the Flash I Report that fit one of eight verified
 patterns. Each becomes its own CSV in data/processed/.
 
 PATTERN "shift_bug": same issue as our original Table 3.1 — a header
@@ -25,6 +25,18 @@ Table 2.7.
 
 PATTERN "title_then_header": a title row sits above the single header
 row. Table 4.20.
+
+PATTERN "shift_two_label": like shift_bug, but the first TWO columns
+(Province, Total) are real labels and only the columns after them shift.
+Table 2.9.
+
+PATTERN "stacked_header": header text is split across several raw rows
+(a wrapped label like "Upto" / "G12", or a merged cell several rows
+tall). Each entry names which rows are the top header, which are the
+sub header, and where the data starts. An optional "tail_from" merges
+all columns from that position on into ONE column (Tables 4.8 and 5.4:
+the "Gender Parity" header is spread over 3 raw columns but holds a
+single value).
 """
 
 import pdfplumber
@@ -50,12 +62,22 @@ TABLES = [
     {"page": 27, "idx": 0, "pattern": "shift_bug", "label": "2_6_eced_enabling_conditions"},
     {"page": 28, "idx": 0, "pattern": "three_header", "label": "2_7_caste_ethnic_eced"},
     {"page": 28, "idx": 1, "pattern": "direct_clean", "label": "2_8_ger_ner_eced"},
+    {"page": 29, "idx": 0, "pattern": "shift_two_label", "label": "2_9_eced_materials"},
+    {"page": 29, "idx": 1, "pattern": "stacked_header", "label": "2_11_grade1_eced_experience",
+     "top_rows": [0, 1, 2, 3], "sub_rows": [4], "data_start": 5},
+    {"page": 30, "idx": 0, "pattern": "shift_bug", "label": "3_1_schools_by_province"},
     {"page": 31, "idx": 0, "pattern": "direct_clean", "label": "3_2_basic_level_schools"},
+    {"page": 31, "idx": 1, "pattern": "stacked_header", "label": "3_3_secondary_level_schools",
+     "top_rows": [0], "sub_rows": [1, 2], "data_start": 3},
     {"page": 35, "idx": 0, "pattern": "shift_bug", "label": "3_8_clcs"},
+    {"page": 38, "idx": 0, "pattern": "stacked_header", "label": "4_3_dalit_janajati_basic",
+     "top_rows": [0, 1], "sub_rows": [2, 3], "data_start": 4},
     {"page": 38, "idx": 1, "pattern": "direct_clean", "label": "4_4_janajati_basic"},
     {"page": 39, "idx": 0, "pattern": "direct_clean", "label": "4_5_disability_basic"},
     {"page": 40, "idx": 0, "pattern": "direct_clean", "label": "4_6_promotion_repetition_dropout_basic"},
     {"page": 40, "idx": 1, "pattern": "direct_clean", "label": "4_7_ger_ner_basic"},
+    {"page": 41, "idx": 0, "pattern": "stacked_header", "label": "4_8_ger_ner_basic_additional",
+     "top_rows": [0], "sub_rows": [1], "data_start": 2, "tail_from": 7},
     {"page": 41, "idx": 1, "pattern": "direct_clean", "label": "4_9_gir_nir_grade1"},
     {"page": 42, "idx": 0, "pattern": "direct_clean", "label": "4_10_survival_rates_basic"},
     {"page": 42, "idx": 1, "pattern": "shift_bug", "label": "4_11_student_school_ratio_basic"},
@@ -66,14 +88,20 @@ TABLES = [
     {"page": 52, "idx": 0, "pattern": "direct_clean", "label": "5_4_disability_secondary"},
     {"page": 53, "idx": 0, "pattern": "direct_clean", "label": "5_5_promotion_dropout_secondary_partial"},
     {"page": 53, "idx": 1, "pattern": "direct_clean", "label": "5_6_ger_ner_secondary"},
+    {"page": 53, "idx": 2, "pattern": "stacked_header", "label": "5_4_ger_ner_secondary_additional",
+     "top_rows": [0], "sub_rows": [1], "data_start": 2, "tail_from": 7},
     {"page": 54, "idx": 0, "pattern": "direct_clean", "label": "5_5_student_school_ratio_secondary"},
     {"page": 60, "idx": 0, "pattern": "direct_clean", "label": "6_1_teachers_by_gender_basic"},
     {"page": 60, "idx": 1, "pattern": "direct_clean", "label": "6_2_teachers_local_province_basic"},
+    {"page": 60, "idx": 2, "pattern": "stacked_header", "label": "6_3_teachers_private_volunteer_community",
+     "top_rows": [0, 1], "sub_rows": [2, 3], "data_start": 4},
     {"page": 61, "idx": 0, "pattern": "direct_clean", "label": "6_4_teachers_institutional"},
     {"page": 61, "idx": 1, "pattern": "direct_clean", "label": "6_5_teachers_secondary_govt_approved"},
     {"page": 62, "idx": 0, "pattern": "direct_clean", "label": "6_6_teachers_local_provincial_secondary"},
     {"page": 62, "idx": 1, "pattern": "direct_clean", "label": "6_7_teachers_private_secondary"},
     {"page": 62, "idx": 2, "pattern": "direct_clean", "label": "6_8_teachers_institutional_secondary"},
+    {"page": 63, "idx": 0, "pattern": "stacked_header", "label": "6_9_str_basic",
+     "top_rows": [0, 1], "sub_rows": [2, 3], "data_start": 4},
     {"page": 63, "idx": 1, "pattern": "direct_clean", "label": "6_10_str_secondary"},
 ]
 
@@ -83,9 +111,8 @@ TABLES = [
 # page 43 idx0/1, page 44 idx0/1, page 45 idx0/1, page 46 idx0, page 47 idx1,
 # page 48 idx0, page 49 idx0, page 50 idx0/1, page 54 idx1, page 55 idx0/1,
 # page 56 idx0/1, page 57 idx0/1, page 58 idx0
-# Also ambiguous (mixed fill pattern, needs a human look before trusting):
-# page 29 idx0/1, page 31 idx1, page 38 idx0, page 41 idx0, page 53 idx2,
-# page 60 idx2, page 63 idx0
+# (The tables that used to be listed here as "ambiguous" are now handled:
+# pages 29, 31, 38, 41, 53, 60 and 63.)
 
 
 def clean_cell(value):
@@ -187,7 +214,63 @@ def build_column_names_three_header(r0, r1, r2):
     return names
 
 
-def extract_table(pdf, page_number, table_idx, pattern):
+def coalesce_row_strict(row, n_label_cols, group_size=3):
+    """Like coalesce_row, but refuses to guess: if a group of raw columns
+    holds MORE than one value, something is not a simple shift, so we stop
+    instead of silently dropping data."""
+    cleaned = [clean_cell(c) for c in row]
+    collapsed = list(cleaned[:n_label_cols])
+    rest = cleaned[n_label_cols:]
+    for i in range(0, len(rest), group_size):
+        values = [v for v in rest[i:i + group_size] if v != ""]
+        if len(values) > 1:
+            raise ValueError(f"more than one value in one group: {values}")
+        collapsed.append(values[0] if values else "")
+    return collapsed
+
+
+def vertical_join(raw, rows, ncols):
+    """Header text that wraps over several raw rows ("Upto" above "G12"):
+    for each column, glue that column's non-empty cells together."""
+    joined = []
+    for j in range(ncols):
+        parts = [clean_cell(raw[r][j]) for r in rows]
+        joined.append(" ".join(p for p in parts if p))
+    return joined
+
+
+def extract_stacked(raw, top_rows, sub_rows, data_start, tail_from=None):
+    ncols = len(raw[0])
+    main_n = tail_from if tail_from is not None else ncols
+
+    top = vertical_join(raw, top_rows, ncols)[:main_n]
+    last = ""
+    for i, v in enumerate(top):          # merged cells: carry label rightwards
+        if v:
+            last = v
+        top[i] = last
+    sub = vertical_join(raw, sub_rows, ncols)[:main_n]
+    cols = [f"{t}_{s}" if t and s else (t or s) for t, s in zip(top, sub)]
+
+    rows = []
+    for r in raw[data_start:]:
+        cleaned = [clean_cell(c) for c in r]
+        row = cleaned[:main_n]
+        if tail_from is not None:
+            values = [v for v in cleaned[tail_from:] if v]
+            if len(values) > 1:
+                raise ValueError(f"more than one value in the merged tail: {values}")
+            row.append(values[0] if values else "")
+        rows.append(row)
+
+    if tail_from is not None:
+        header_rows = list(top_rows) + list(sub_rows)
+        tail_text = [clean_cell(raw[r][j]) for r in header_rows for j in range(tail_from, ncols)]
+        cols.append(" ".join(t for t in tail_text if t))
+    return pd.DataFrame(rows, columns=cols)
+
+
+def extract_table(pdf, page_number, table_idx, pattern, opts=None):
     page = pdf.pages[page_number - 1]
     tables = page.extract_tables()
     if table_idx >= len(tables):
@@ -213,6 +296,12 @@ def extract_table(pdf, page_number, table_idx, pattern):
     elif pattern == "title_then_header":
         cols = build_single_header(raw[1])
         rows = [clean_direct_row(r) for r in raw[2:]]
+    elif pattern == "shift_two_label":
+        cols = coalesce_row_strict(raw[0], n_label_cols=2)
+        rows = [coalesce_row_strict(r, n_label_cols=2) for r in raw[1:]]
+    elif pattern == "stacked_header":
+        return extract_stacked(raw, opts["top_rows"], opts["sub_rows"],
+                               opts["data_start"], opts.get("tail_from"))
     else:
         raise ValueError(f"Unknown pattern: {pattern}")
 
@@ -227,7 +316,7 @@ if __name__ == "__main__":
     with pdfplumber.open(PDF_PATH) as pdf:
         for entry in TABLES:
             try:
-                df = extract_table(pdf, entry["page"], entry["idx"], entry["pattern"])
+                df = extract_table(pdf, entry["page"], entry["idx"], entry["pattern"], entry)
                 out_path = OUTPUT_DIR / f"table_{entry['label']}.csv"
                 df.to_csv(out_path, index=False)
                 succeeded.append(entry["label"])
